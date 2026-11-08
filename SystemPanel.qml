@@ -1852,7 +1852,7 @@ KeyboardPanel {
 
                 Text {
                   textFormat: Text.PlainText
-                  text: hw.gpuInfo && hw.gpuInfo.name ? hw.gpuInfo.name : "Graphics Adapter"
+                  text: hw.gpuIsNvidia && hw.nvidiaGpus.length > 1 ? hw.nvidiaGpus.length + " NVIDIA GPUs" : (hw.gpuInfo && hw.gpuInfo.name ? hw.gpuInfo.name : "Graphics Adapter")
                   color: root.baseColor
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.bodySmall
@@ -1866,7 +1866,7 @@ KeyboardPanel {
               Column {
                 width: parent.width
                 spacing: Style.space(4)
-                visible: hw.gpuVramTotalBytes > 0
+                visible: !hw.gpuIsNvidia && hw.gpuVramTotalBytes > 0
 
                 Row {
                   width: parent.width
@@ -1915,6 +1915,7 @@ KeyboardPanel {
 
               Row {
                 width: parent.width
+                visible: !hw.gpuIsNvidia
                 spacing: Style.space(16)
 
                 Column {
@@ -1937,6 +1938,113 @@ KeyboardPanel {
                   InfoPair { label: "Clock"; value: hw.gpuMhz > 0 ? Model.formatGhz(hw.gpuMhz) : "–" }
                   InfoPair { label: "Fan"; value: hw.gpuRpm >= 0 ? Model.formatRpm(hw.gpuRpm) : "–" }
                   InfoPair { label: "Driver"; value: hw.gpuInfo && hw.gpuInfo.kind ? String(hw.gpuInfo.kind) : "–" }
+                }
+              }
+
+              // NVIDIA: one block per card, all sampled by a single nvidia-smi
+              // call (upstream 1.4.0). Inside this card so the section stays
+              // one entry for ordering and folding.
+              Repeater {
+                model: hw.gpuIsNvidia ? hw.nvidiaGpus : []
+
+                delegate: Column {
+                  id: card
+                  required property var modelData
+                  required property int index
+                  readonly property var s: hw.nvidiaSamples[index] || null
+                  readonly property real vramPct: s && s.vramTotalBytes > 0
+                    ? Model.clamp(100 * s.vramUsedBytes / s.vramTotalBytes, 0, 100) : -1
+                  width: parent.width
+                  spacing: Style.space(10)
+
+                  // The card name only when there are several; one card's
+                  // name is already the section header.
+                  Text {
+                    textFormat: Text.PlainText
+                    visible: hw.nvidiaGpus.length > 1
+                    width: parent.width
+                    text: card.modelData.name || "Graphics Adapter"
+                    color: root.baseColor
+                    font.family: root.fontFamily
+                    font.pixelSize: Style.font.caption
+                    font.bold: true
+                    wrapMode: Text.Wrap
+                  }
+
+                  Column {
+                    width: parent.width
+                    spacing: Style.space(4)
+                    visible: card.vramPct >= 0
+
+                    Row {
+                      width: parent.width
+
+                      Text {
+                        textFormat: Text.PlainText
+                        text: "VRAM"
+                        color: Qt.darker(root.baseColor, 1.4)
+                        font.family: root.fontFamily
+                        font.pixelSize: Style.font.caption
+                        font.bold: true
+                      }
+
+                      Item {
+                        width: Math.max(0, parent.width - parent.children[0].implicitWidth - parent.children[2].implicitWidth)
+                        height: 1
+                      }
+
+                      Text {
+                        textFormat: Text.PlainText
+                        text: card.s ? (Model.formatGib(Model.gibFromBytes(card.s.vramUsedBytes)) + " / " + Model.formatGib(Model.gibFromBytes(card.s.vramTotalBytes)) + " GiB (" + Math.round(card.vramPct) + "%)") : "–"
+                        color: root.warm(root.baseColor, Model.severity(card.vramPct, root.warnPercent, root.criticalPercent))
+                        font.family: root.fontFamily
+                        font.pixelSize: Style.font.caption
+                        font.bold: true
+                      }
+                    }
+
+                    Rectangle {
+                      width: parent.width
+                      height: Style.space(6)
+                      radius: height / 2
+                      color: Qt.rgba(root.baseColor.r, root.baseColor.g, root.baseColor.b, 0.12)
+
+                      Rectangle {
+                        anchors.left: parent.left
+                        anchors.top: parent.top
+                        anchors.bottom: parent.bottom
+                        radius: parent.radius
+                        color: root.warm(root.baseColor, Model.severity(card.vramPct, root.warnPercent, root.criticalPercent))
+                        width: card.vramPct >= 0 ? Math.max(parent.height, Math.min(parent.width, parent.width * (card.vramPct / 100))) : 0
+                        Behavior on width { enabled: root.layoutAnimated; NumberAnimation { duration: 320; easing.type: Easing.OutCubic } }
+                      }
+                    }
+                  }
+
+                  Row {
+                    width: parent.width
+                    spacing: Style.space(16)
+
+                    Column {
+                      width: (parent.width - parent.spacing) / 2
+                      spacing: Style.spacing.labelGap
+
+                      InfoPair { label: "Load"; value: card.s && card.s.busy >= 0 ? Model.formatPercent(card.s.busy) : "–" }
+                      InfoPair {
+                        label: "Temperature"
+                        value: card.s && card.s.tempC > 0 ? Model.formatTemp(card.s.tempC, root.fahrenheit) : "–"
+                        valueColor: root.tempColor(card.s ? card.s.tempC : -1)
+                      }
+                    }
+
+                    Column {
+                      width: (parent.width - parent.spacing) / 2
+                      spacing: Style.spacing.labelGap
+
+                      InfoPair { label: "Power"; value: card.s && card.s.watts >= 0 ? Model.formatWatts(card.s.watts) : "–" }
+                      InfoPair { label: "Driver"; value: "nvidia" }
+                    }
+                  }
                 }
               }
             }

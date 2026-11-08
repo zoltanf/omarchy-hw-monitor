@@ -108,7 +108,8 @@ function parseProbe(raw) {
     var gpus = []
     var rawGpus = parsed.gpus instanceof Array ? parsed.gpus : []
     var PATH_KEYS = ["busyPath", "vramUsedPath", "vramTotalPath", "tempPath",
-                     "powerPath", "fanPath", "clockPath", "agxStatsPath"]
+                     "powerPath", "fanPath", "clockPath", "agxStatsPath", "idlePath",
+                     "clockMhzPath", "pmStatusPath"]
     for (var i = 0; i < rawGpus.length; i++) {
       var g = rawGpus[i]
       if (!g || typeof g !== "object") continue
@@ -120,6 +121,7 @@ function parseProbe(raw) {
       var card = cleanString(g.card, 64)
       if (card !== undefined) gpu.card = card
       gpu.index = Math.max(0, Math.floor(toNumberSafe(g.index, 0)))
+      gpu.connectedOutputs = clamp(Math.floor(toNumberSafe(g.connectedOutputs, 0)), 0, 64)
       // Absolute path of the nvidia-smi the probe resolved: must be a clean
       // absolute path (no relative names, no traversal); the widget falls
       // back to a bare 'nvidia-smi' when it is missing or malformed.
@@ -154,12 +156,48 @@ function parseProbe(raw) {
   }
 }
 
-// Pick which discovered card the widget reports on. `auto` means the first,
-// which hw-probe has already sorted so a card with a load counter wins.
-function pickGpu(gpus, preference) {
+// Index of the NVIDIA card to show in "busiest" mode. The current card stays
+// unless another one is at least `margin` points busier, so two cards with
+// similar load do not make the readout flip every sample.
+function busiestNvidia(samples, current, margin) {
+  var best = -1, bestLoad = -1
+  for (var i = 0; i < samples.length; i++) {
+    if (samples[i] && samples[i].busy > bestLoad) { best = i; bestLoad = samples[i].busy }
+  }
+  if (best < 0) return current
+  var cur = samples[current]
+  if (cur && cur.busy >= 0 && bestLoad < cur.busy + margin) return current
+  return best
+}
+
+// Pick which discovered card the widget reports on. `auto` prefers the card
+// driving the most connected displays, then falls back to probe order (where a
+// card with a load counter wins). This keeps a headless iGPU from masking the
+// discrete GPU that is actually driving the desktop. `busiest` follows the
+// NVIDIA card Service picked via busiestNvidia (sticky).
+function pickGpu(gpus, preference, busiestIndex) {
   if (!(gpus instanceof Array) || gpus.length === 0) return null
   var want = String(preference === undefined || preference === null ? "auto" : preference).trim().toLowerCase()
-  if (want === "" || want === "auto") return gpus[0]
+  if (want === "" || want === "auto") {
+    var selected = gpus[0]
+    var mostOutputs = Math.max(0, toNumberSafe(selected.connectedOutputs, 0))
+    for (var a = 1; a < gpus.length; a++) {
+      var outputs = Math.max(0, toNumberSafe(gpus[a].connectedOutputs, 0))
+      if (outputs > mostOutputs) {
+        selected = gpus[a]
+        mostOutputs = outputs
+      }
+    }
+    return selected
+  }
+
+  // "busiest": follow the card Service picked via busiestNvidia (sticky).
+  if (want === "busiest") {
+    for (var b = 0; b < gpus.length; b++) {
+      if (String(gpus[b].kind) === "nvidia" && gpus[b].index === busiestIndex) return gpus[b]
+    }
+    return gpus[0]
+  }
 
   var index = parseInt(want, 10)
   if (isFinite(index) && index >= 0 && index < gpus.length) return gpus[index]
@@ -202,6 +240,28 @@ function cpuUsage(previous, current) {
   var idleDelta = current.idle - previous.idle
   if (totalDelta <= 0) return -1
   return clamp(100 * (1 - idleDelta / totalDelta), 0, 100)
+}
+
+// Intel reports a running total of milliseconds spent idle in RC6 instead of a
+// load figure. Load is the share of wall-clock time between two samples that
+// was not idle. The counter and the clock are sampled together, so an uneven
+// interval cannot skew it; a counter that went backwards (driver reload) gives
+// nothing rather than a negative load. A wall gap far beyond the sample
+// interval means the counter sat frozen while time advanced — suspend/resume
+// or a clock step — and the delta would read ~100%; refuse it and re-baseline.
+// Twice the interval plus headroom covers timer jitter without hiding real load.
+// A window under MIN_WALL_MS is sub-resolution (ms-granularity counters make
+// 1-3 ms of wall divide two small integers into 0/100%): manual resamples can
+// land in the same event-loop turn as the bar timer, so refuse those too.
+var GPU_IDLE_MIN_WALL_MS = 250
+function gpuBusyFromIdle(previous, current, maxWallMs) {
+  if (!previous || !current) return -1
+  var wallDelta = current.atMs - previous.atMs
+  var idleDelta = current.idleMs - previous.idleMs
+  if (wallDelta < GPU_IDLE_MIN_WALL_MS || idleDelta < 0) return -1
+  var cap = toNumberSafe(maxWallMs, 0)
+  if (cap > 0 && wallDelta > cap) return -1
+  return clamp(100 * (1 - idleDelta / wallDelta), 0, 100)
 }
 
 // Average current clock across every thread. /proc/cpuinfo is the one place
@@ -379,6 +439,16 @@ function parseNvidia(raw) {
     vramTotalBytes: vramTotal >= 0 ? vramTotal * 1048576 : -1,
     watts: value(4, 2000)
   }
+}
+
+// One sample per card, in nvidia-smi index order; null marks an unparseable line.
+function parseNvidiaAll(raw) {
+  var lines = String(raw || "").trim().split("\n")
+  var out = []
+  for (var i = 0; i < lines.length && i < 16; i++) {
+    out.push(lines[i].trim() ? parseNvidia(lines[i]) : null)
+  }
+  return out
 }
 
 // -------------------------------------------------------------- formatting

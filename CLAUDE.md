@@ -21,6 +21,18 @@ Git remotes: `origin` = the fork, `upstream` = meviusisback.
   strings). `Model.parseProbe` now also validates the fork's `zram` entries
   (`dir` must be `/sys/block/zramN`). `disk-probe` has a watchdog but no byte
   guard, unlike upstream's helpers. Version `1.3.2+storage.3`.
+- 2026-11-08: merged upstream 1.6.0 (`2ca32ed`): GPU auto-select prefers
+  the card driving displays, `"busiest"` mode, every NVIDIA card (one
+  nvidia-smi call), Intel load from RC6 residency (`idlePath`) with
+  runtime-suspend handling, upstream `tests/`. The fork's Asahi
+  `agxStatsPath` sits beside `idlePath` in `hw-probe` and
+  `Model.parseProbe`. Upstream's per-card NVIDIA blocks live **inside** the
+  fork's Graphics section (one Repeater in `gpuCol`; the header shows "N NVIDIA
+  GPUs" when there are several), not as separate cards, so ordering and
+  folding keep one `gpu` key. The Intel idle-delta bound uses
+  `sampleIntervalSec` (battery interval) instead of upstream's `intervalSec`.
+  Version `1.6.0+storage.1`. Not exercised on real hardware: NVIDIA, Intel,
+  Asahi (the author's laptop is AMD).
 - 2026-10-12: Memory section renamed "Memory & Swap", RAM Compression block
   (zram from `mm_stat`, devices found by `hw-probe` via `/proc/swaps`;
   zswap from `/proc/meminfo`). zswap path untested (off on the author's

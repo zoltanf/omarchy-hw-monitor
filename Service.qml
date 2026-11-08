@@ -48,8 +48,35 @@ Item {
 
   property var probe: Model.parseProbe("")
   readonly property var cpuInfo: probe.cpu
-  readonly property var gpuInfo: Model.pickGpu(probe.gpus, setting("gpu", "auto"))
+  readonly property var gpuInfo: Model.pickGpu(probe.gpus, setting("gpu", "auto"), busiestIndex)
+  onGpuInfoChanged: {
+    if (_destroyed) return
+    // The idle baseline belongs to one GT's counter; a reselect to a different
+    // card must not mix it into another card's delta. A re-probe resolving to
+    // the same card keeps the baseline — the counter never changed identity.
+    // Keyed on kind+card+index: unmatched NVIDIA entries carry no card field,
+    // but their nvidia-smi index is distinct per card.
+    var gpu = gpuInfo || {}
+    var key = String(gpu.kind || "") + "/" + String(gpu.card || "") + "/" + String(gpu.index === undefined ? "" : gpu.index)
+    if (key !== _gpuKey) {
+      _gpuKey = key
+      _prevGpuIdle = null
+      _gpuSuspended = false
+      // Readouts reset too, so the old card's figures never render as the new
+      // card's until the next sample repopulates them.
+      gpuPercent = -1
+      gpuTempC = -1
+      gpuWatts = -1
+      gpuRpm = -1
+      gpuMhz = -1
+      gpuVramUsedBytes = -1
+      gpuVramTotalBytes = -1
+    }
+  }
   readonly property bool hasGpu: gpuInfo !== null
+  readonly property var nvidiaGpus: (probe.gpus || []).filter(function (g) { return String(g.kind) === "nvidia" })
+  property var nvidiaSamples: []
+  property int busiestIndex: 0
   readonly property bool gpuIsNvidia: hasGpu && String(gpuInfo.kind) === "nvidia"
 
   // -------------------------------------------------------------- readings
@@ -150,6 +177,15 @@ Item {
   // two samples, so there is nothing to show until the second one lands.
   property var _prevJiffies: null
 
+  // Previous Intel RC6 idle reading and when it was taken. GPU load on Intel
+  // is derived the same way as CPU load, so it also needs two samples.
+  property var _prevGpuIdle: null
+  property bool _gpuSuspended: false
+  // Card the current baseline and readouts belong to. onGpuInfoChanged fires
+  // on every probe assignment (new object identity), so the reset keys on
+  // this instead — otherwise a same-card re-probe needlessly dashes Intel load.
+  property string _gpuKey: ""
+
   function setting(name, fallback) {
     var value = settings ? settings[name] : undefined
     return value === undefined || value === null ? fallback : value
@@ -245,25 +281,30 @@ Item {
 
     if (gpuAgxFile.path !== "") sampleAgx()
 
+    if (gpuBusyFile.path === "" && gpuIdleFile.path !== "") sampleGpuIdle()
+    else if (gpuIdleFile.path === "" && gpuPmStatusFile.path !== "") refreshGpuSuspended()
     if (gpuBusyFile.path !== "") {
       gpuBusyFile.reload()
       gpuPercent = readNumber(gpuBusyFile, 0)
     }
-    if (gpuTempFile.path !== "") {
+    if (gpuTempFile.path !== "" && !_gpuSuspended) {
       gpuTempFile.reload()
       gpuTempC = readTemp(gpuTempFile)
     }
-    if (gpuPowerFile.path !== "") {
+    if (gpuPowerFile.path !== "" && !_gpuSuspended) {
       gpuPowerFile.reload()
       gpuWatts = readNumber(gpuPowerFile, 1000000)
     }
-    if (gpuFanFile.path !== "") {
+    if (gpuFanFile.path !== "" && !_gpuSuspended) {
       gpuFanFile.reload()
       gpuRpm = readNumber(gpuFanFile, 0)
     }
-    if (gpuClockFile.path !== "") {
+    if (gpuClockFile.path !== "" && !_gpuSuspended) {
       gpuClockFile.reload()
       gpuMhz = readNumber(gpuClockFile, 1000000)
+    } else if (gpuClockMhzFile.path !== "" && !_gpuSuspended) {
+      gpuClockMhzFile.reload()
+      gpuMhz = readNumber(gpuClockMhzFile, 0)
     }
     if (gpuVramUsedFile.path !== "") {
       gpuVramUsedFile.reload()
@@ -324,6 +365,50 @@ Item {
     if (s.watts >= 0) gpuWatts = s.watts
   }
 
+  // Reading runtime_status never wakes the device, so this stays cheap to
+  // call even when idle sampling is skipped (busyPath cards, clock-only cards).
+  function refreshGpuSuspended() {
+    _gpuSuspended = false
+    if (gpuPmStatusFile.path !== "") {
+      gpuPmStatusFile.reload()
+      _gpuSuspended = String(gpuPmStatusFile.text()).trim() === "suspended"
+    }
+    // Clock-only cards never run sampleGpuIdle, so dash here too: the gated
+    // reads below are skipped while suspended and would otherwise freeze.
+    // (sampleGpuIdle also sets gpuPercent = 0 on its own suspended branch.)
+    if (_gpuSuspended) {
+      gpuMhz = 0
+      gpuTempC = -1
+      gpuWatts = -1
+      gpuRpm = -1
+    }
+  }
+
+  // A runtime-suspended GT is idle by definition, and reading its residency
+  // counter or clock would wake it, so it reads as 0% without touching either.
+  // The baseline is dropped too: the next delta must not span the suspension.
+  function sampleGpuIdle() {
+    refreshGpuSuspended()
+    if (_gpuSuspended) {
+      _prevGpuIdle = null
+      gpuPercent = 0
+      return
+    }
+    gpuIdleFile.reload()
+    var idleMs = readNumber(gpuIdleFile, 0)
+    if (idleMs < 0) return
+    var current = { idleMs: idleMs, atMs: Date.now() }
+    // Twice the sample interval plus headroom: a suspend or clock step makes
+    // wall time jump while the counter sits frozen, and that delta would print
+    // ~100%. Refusing it keeps the last good figure; the baseline still moves
+    // to current, so the NEXT delta spans only the post-resume interval.
+    var usage = Model.gpuBusyFromIdle(_prevGpuIdle, current, 2 * root.sampleIntervalSec * 1000 + 1000)
+    if (usage >= 0) {
+      gpuPercent = usage
+    }
+    _prevGpuIdle = current
+  }
+
   function sampleNvidia() {
     if (_destroyed || nvidiaProcess.running) return
     // hw-probe reports the absolute path it resolved, so the bar never
@@ -331,8 +416,7 @@ Item {
     var bin = gpuInfo && gpuInfo.nvidiaPath ? String(gpuInfo.nvidiaPath) : "nvidia-smi"
     nvidiaProcess.command = [bin,
                              "--query-gpu=utilization.gpu,temperature.gpu,memory.used,memory.total,power.draw",
-                             "--format=csv,noheader,nounits",
-                             "--id=" + String(gpuInfo.index !== undefined ? gpuInfo.index : 0)]
+                             "--format=csv,noheader,nounits"]
     _nvidiaBase = String(nvidiaOut.text).length
     _nvidiaErrBase = String(nvidiaErr.text).length
     nvidiaWatchdog.restart()
@@ -340,7 +424,12 @@ Item {
   }
 
   function applyNvidia(raw) {
-    var sample = Model.parseNvidia(raw)
+    var all = Model.parseNvidiaAll(raw)
+    busiestIndex = Model.busiestNvidia(all, busiestIndex, 10)
+    var sample = all[gpuInfo && gpuInfo.index !== undefined ? gpuInfo.index : 0]
+    // Publish every card before the guard: a null or missing selected slot keeps
+    // the bar readouts on their last good value, but must not freeze the panel.
+    nvidiaSamples = all
     if (!sample) return
     gpuPercent = sample.busy
     gpuTempC = sample.tempC
@@ -467,6 +556,24 @@ Item {
     printErrors: false
   }
   FileView {
+    id: gpuIdleFile
+    path: root.hasGpu && root.gpuInfo.idlePath ? String(root.gpuInfo.idlePath) : ""
+    blockAllReads: true
+    printErrors: false
+  }
+  FileView {
+    id: gpuClockMhzFile
+    path: root.hasGpu && root.gpuInfo.clockMhzPath ? String(root.gpuInfo.clockMhzPath) : ""
+    blockAllReads: true
+    printErrors: false
+  }
+  FileView {
+    id: gpuPmStatusFile
+    path: root.hasGpu && root.gpuInfo.pmStatusPath ? String(root.gpuInfo.pmStatusPath) : ""
+    blockAllReads: true
+    printErrors: false
+  }
+  FileView {
     id: gpuVramUsedFile
     path: root.hasGpu && root.gpuInfo.vramUsedPath ? String(root.gpuInfo.vramUsedPath) : ""
     blockAllReads: true
@@ -495,8 +602,11 @@ Item {
         if (root._destroyed) return
         root.probe = Model.parseProbe(text)
         // Sensor paths only become known here, so take the first real sample
-        // once they land instead of waiting out a whole interval.
+        // once they land instead of waiting out a whole interval. Re-base the
+        // warmup on this sample: the 250 ms idle-delta floor would refuse a
+        // second sample that lands inside the same window on a slow probe.
         root.sample()
+        warmupSampleTimer.restart()
       }
     }
     stderr: StdioCollector { id: probeErr; waitForEnd: false }

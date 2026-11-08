@@ -2,7 +2,7 @@
 
 > **Fork:** `zoltanf.hw-monitor`, based on
 > [meviusisback/omarchy-hw-monitor](https://github.com/meviusisback/omarchy-hw-monitor)
-> 1.3.2. It adds:
+> 1.6.0. It adds:
 >
 > - a **Storage** section in the system panel: free space per mounted disk,
 >   removable drive and network share (`/boot` and other EFI mounts hidden);
@@ -247,7 +247,7 @@ omarchy bar set zoltanf.hw-monitor fahrenheit true --json
 | `ramIconRotation` | int | `0` | Rotate the memory glyph (0, 90, 180, 270). |
 | `refreshIntervalSec` | int | `2` | Seconds between samples. `1` is as fast as `FileView` makes sense; `5` is plenty for a background bar. |
 | `batteryRefreshIntervalSec` | number | `3.5` | Seconds between samples while the laptop runs on battery (fractions allowed); the larger of this and `refreshIntervalSec` applies. The open panel ticks every 2 s on battery, every second on AC. |
-| `gpu` | string | `"auto"` | `"auto"` picks the card reporting load; otherwise an index (`0`, `1`) or name substring. |
+| `gpu` | string | `"auto"` | `"auto"` prefers the card driving connected displays, then a card reporting load; `"busiest"` follows the NVIDIA card with the highest load; otherwise an index (`0`, `1`) or name substring. |
 | `warnPercent` | int | `70` | Load threshold where numbers and glyphs warm toward the urgent colour. |
 | `criticalPercent` | int | `90` | Load threshold where the gauge glows and color reaches full urgent. |
 | `warnTempC` | int | `75` | Temperature threshold (°C) where figures warm toward urgent. |
@@ -280,6 +280,33 @@ the last two only while the system panel is open.
 
 An NVIDIA card is the exception: it reports none of this through sysfs, so it
 is polled through `nvidia-smi` on the same interval.
+
+With several cards installed, `gpu: "auto"` (the default) shows the card
+driving the most connected displays — so on a hybrid desktop with a headless
+iGPU and a discrete card behind the monitors, the readings follow the card you
+are actually looking at. When no card drives a display (or the counts tie),
+the probe order wins: a card reporting load sorts ahead of one that only
+reports temperature. An explicit index (`0`, `1`) or name substring always
+overrides this. NVIDIA cards are matched to their DRM card by PCI bus id
+(tolerant of `nvidia-smi`'s 8-digit domain padding), so a display-driving RTX
+is preferred over a load-reporting headless iGPU.
+Connected Intel cards (`i915` and `xe`) have no load file either — a headless
+Intel card is skipped outright, since sampling it would keep it awake. Their
+load is derived from the render GT's RC6 idle counter
+(`gt/gt0/rc6_residency_ms` on i915, `tile0/gt0/gtidle/idle_residency_ms` on
+xe): the share of each interval the GT was not idle. That is how busy the GT
+was kept, not `intel_gpu_top`'s per-engine figure, which needs perf and
+therefore root. The clock comes from the driver's actual-frequency file. A GT
+that has runtime-suspended reads as idle without being touched, since reading
+its counters would wake it; its clock, temperature, power and fan read as
+dashes until it resumes. GPU temperature is the card's own hwmon sensor when
+the driver exposes one, otherwise a dash. In probe order, idle-derived Intel
+cards sort last — after NVIDIA and after temperature-only cards — so on a
+tie they never win `auto` over a card with a direct load counter.
+
+`gpu: "busiest"` follows the NVIDIA card with the highest load and switches
+only when another card is at least 10 points busier, so two cards under similar
+load do not make the bar flip every sample.
 
 Sensor paths are found once, at load, by [`hw-probe`](hw-probe) — a small shell
 script, because working out *which* files a machine exposes means globbing
