@@ -734,7 +734,7 @@ Panel {
           color: group.isTempCell
             ? root.tempColor(group.cellData.tempC)
             : root.warm(root.base, group.cellData.severity)
-          Behavior on color { ColorAnimation { duration: 240 } }
+          Behavior on color { enabled: root.hw.animateValues; ColorAnimation { duration: 240 } }
         }
 
         Text {
@@ -749,7 +749,7 @@ Panel {
           font.family: root.fontFamily
           font.pixelSize: root.iconSize
           renderType: Text.NativeRendering
-          Behavior on color { ColorAnimation { duration: 240 } }
+          Behavior on color { enabled: root.hw.animateValues; ColorAnimation { duration: 240 } }
         }
       }
 
@@ -763,6 +763,7 @@ Panel {
         trackColor: Qt.rgba(root.base.r, root.base.g, root.base.b, 0.14)
         borderColor: Qt.rgba(root.base.r, root.base.g, root.base.b, 0.4)
         glow: group.cellData.severity >= 1
+        animated: root.hw.animateValues
       }
 
       Text {
@@ -807,7 +808,7 @@ Panel {
           font.bold: !group.isTempCell
           verticalAlignment: Text.AlignVCenter
           renderType: Text.NativeRendering
-          Behavior on color { ColorAnimation { duration: 240 } }
+          Behavior on color { enabled: root.hw.animateValues; ColorAnimation { duration: 240 } }
         }
       }
 
@@ -827,7 +828,7 @@ Panel {
           font.pixelSize: root.valueSize
           verticalAlignment: Text.AlignVCenter
           renderType: Text.NativeRendering
-          Behavior on color { ColorAnimation { duration: 240 } }
+          Behavior on color { enabled: root.hw.animateValues; ColorAnimation { duration: 240 } }
         }
 
         Text {
@@ -839,7 +840,7 @@ Panel {
           font.pixelSize: root.valueSize
           verticalAlignment: Text.AlignVCenter
           renderType: Text.NativeRendering
-          Behavior on color { ColorAnimation { duration: 240 } }
+          Behavior on color { enabled: root.hw.animateValues; ColorAnimation { duration: 240 } }
         }
       }
 
@@ -870,7 +871,7 @@ Panel {
           font.bold: false
           verticalAlignment: Text.AlignVCenter
           renderType: Text.NativeRendering
-          Behavior on color { ColorAnimation { duration: 240 } }
+          Behavior on color { enabled: root.hw.animateValues; ColorAnimation { duration: 240 } }
         }
       }
 

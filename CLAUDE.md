@@ -21,6 +21,17 @@ Git remotes: `origin` = the fork, `upstream` = meviusisback.
   strings). `Model.parseProbe` now also validates the fork's `zram` entries
   (`dir` must be `/sys/block/zramN`). `disk-probe` has a watchdog but no byte
   guard, unlike upstream's helpers. Version `1.3.2+storage.3`.
+- 2026-11-08: value animations off by default, behind the `animateValues`
+  setting (Service.qml). The Behaviors stay in the code (Gauge height/colour,
+  Dial and Widget colour fades, panel meter widths, InfoPair colour), gated on
+  the flag; layout (fold/reorder) and hover animations are untouched. Why: every
+  2 s sample played ~20 frames per bar on both monitors (temperature colours
+  change a little on every sample, so the 240 ms fades always ran). Measured
+  whole-shell CPU, 30 s windows, 2 s refresh: bar 6.4-6.8 % on vs 2.8-3.0 % off;
+  panel open 7.1-13.1 % on vs 3.0-3.3 % off. Sensor reads and parsing are
+  microseconds, proc_top ~57 ms per 3 s run, disk-probe ~22 ms per 5 s: not
+  worth touching. Method: per-thread utime+stime from /proc/<pid>/task, render
+  thread wakeups from voluntary_ctxt_switches (frames.sh/thr.sh, scratchpad only).
 - 2026-11-08: merged upstream 1.6.0 (`2ca32ed`): GPU auto-select prefers
   the card driving displays, `"busiest"` mode, every NVIDIA card (one
   nvidia-smi call), Intel load from RC6 residency (`idlePath`) with

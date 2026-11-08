@@ -895,6 +895,7 @@ KeyboardPanel {
                 accentColor: Color.accent
                 severity: dialInfo.severity
                 fontFamily: root.fontFamily
+                animated: root.hw.animateValues
               }
             }
           }
@@ -1142,7 +1143,7 @@ KeyboardPanel {
                     id: lm1
                     width: (parent.width - parent.spacing * 2) / 3
                     period: "Load 1m"
-                    meterAnimated: root.layoutAnimated
+                    meterAnimated: root.layoutAnimated && root.hw.animateValues
                     value: hw.load ? hw.load.one : 0
                     maxVal: parent.maxCores
                     baseColor: root.baseColor
@@ -1154,7 +1155,7 @@ KeyboardPanel {
                     id: lm5
                     width: (parent.width - parent.spacing * 2) / 3
                     period: "Load 5m"
-                    meterAnimated: root.layoutAnimated
+                    meterAnimated: root.layoutAnimated && root.hw.animateValues
                     value: hw.load ? hw.load.five : 0
                     maxVal: parent.maxCores
                     baseColor: root.baseColor
@@ -1166,7 +1167,7 @@ KeyboardPanel {
                     id: lm15
                     width: (parent.width - parent.spacing * 2) / 3
                     period: "Load 15m"
-                    meterAnimated: root.layoutAnimated
+                    meterAnimated: root.layoutAnimated && root.hw.animateValues
                     value: hw.load ? hw.load.fifteen : 0
                     maxVal: parent.maxCores
                     baseColor: root.baseColor
@@ -1280,7 +1281,7 @@ KeyboardPanel {
                     radius: parent.radius
                     color: root.warm(root.baseColor, Model.severity(hw.memPercent, root.warnPercent, root.criticalPercent))
                     width: hw.memPercent >= 0 ? Math.max(parent.height, Math.min(parent.width, parent.width * (hw.memPercent / 100))) : 0
-                    Behavior on width { enabled: root.layoutAnimated; NumberAnimation { duration: 320; easing.type: Easing.OutCubic } }
+                    Behavior on width { enabled: root.layoutAnimated && root.hw.animateValues; NumberAnimation { duration: 320; easing.type: Easing.OutCubic } }
                   }
                 }
               }
@@ -1370,7 +1371,7 @@ KeyboardPanel {
                     radius: parent.radius
                     color: root.warm(root.baseColor, Model.severity(zramBlock.fill, root.warnPercent, root.criticalPercent))
                     width: zramBlock.fill > 0 ? Math.max(parent.height, Math.min(parent.width, parent.width * (zramBlock.fill / 100))) : 0
-                    Behavior on width { enabled: root.layoutAnimated; NumberAnimation { duration: 320; easing.type: Easing.OutCubic } }
+                    Behavior on width { enabled: root.layoutAnimated && root.hw.animateValues; NumberAnimation { duration: 320; easing.type: Easing.OutCubic } }
                   }
                 }
               }
@@ -1569,7 +1570,7 @@ KeyboardPanel {
                       radius: parent.radius
                       color: fillColor
                       width: modelData.percent >= 0 ? Math.max(parent.height, Math.min(parent.width, parent.width * (modelData.percent / 100))) : 0
-                      Behavior on width { enabled: root.layoutAnimated; NumberAnimation { duration: 320; easing.type: Easing.OutCubic } }
+                      Behavior on width { enabled: root.layoutAnimated && root.hw.animateValues; NumberAnimation { duration: 320; easing.type: Easing.OutCubic } }
                     }
                   }
 
@@ -1782,7 +1783,7 @@ KeyboardPanel {
                         radius: parent.radius
                         color: sevColor
                         width: Math.max(parent.height, Math.min(parent.width, parent.width * shareD))
-                        Behavior on width { enabled: root.layoutAnimated; NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
+                        Behavior on width { enabled: root.layoutAnimated && root.hw.animateValues; NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
                       }
                     }
                   }
@@ -1908,7 +1909,7 @@ KeyboardPanel {
                     radius: parent.radius
                     color: root.warm(root.baseColor, Model.severity(hw.gpuVramPercent, root.warnPercent, root.criticalPercent))
                     width: hw.gpuVramPercent >= 0 ? Math.max(parent.height, Math.min(parent.width, parent.width * (hw.gpuVramPercent / 100))) : 0
-                    Behavior on width { enabled: root.layoutAnimated; NumberAnimation { duration: 320; easing.type: Easing.OutCubic } }
+                    Behavior on width { enabled: root.layoutAnimated && root.hw.animateValues; NumberAnimation { duration: 320; easing.type: Easing.OutCubic } }
                   }
                 }
               }
@@ -2016,7 +2017,7 @@ KeyboardPanel {
                         radius: parent.radius
                         color: root.warm(root.baseColor, Model.severity(card.vramPct, root.warnPercent, root.criticalPercent))
                         width: card.vramPct >= 0 ? Math.max(parent.height, Math.min(parent.width, parent.width * (card.vramPct / 100))) : 0
-                        Behavior on width { enabled: root.layoutAnimated; NumberAnimation { duration: 320; easing.type: Easing.OutCubic } }
+                        Behavior on width { enabled: root.layoutAnimated && root.hw.animateValues; NumberAnimation { duration: 320; easing.type: Easing.OutCubic } }
                       }
                     }
                   }
@@ -2217,7 +2218,7 @@ KeyboardPanel {
       color: infoPairRoot.valueColor
       font.family: root.fontFamily
       font.pixelSize: Style.font.bodySmall
-      Behavior on color { ColorAnimation { duration: 240 } }
+      Behavior on color { enabled: root.hw.animateValues; ColorAnimation { duration: 240 } }
     }
   }
 

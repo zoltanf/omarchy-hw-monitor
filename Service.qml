@@ -132,6 +132,17 @@ Item {
     return String(value).trim().toLowerCase() !== "false"
   }
   readonly property string procTopPath: pluginDir + "/proc_top.py"
+  // Value animations: gauges and meters easing to each new reading, and the
+  // colour fades that follow it. Off by default: every sample then played
+  // ~20 frames per bar (both monitors) and in the open panel, which measured
+  // 6.8 % vs 3.0 % shell CPU on the bar and 12.7 % vs 2.6 % with the panel
+  // open (2026-11-08, 2 s refresh). The Behaviors are kept, gated on this flag;
+  // layout animations (fold, reorder) and hover feedback are not affected.
+  readonly property bool animateValues: {
+    var value = setting("animateValues", false)
+    if (typeof value === "boolean") return value
+    return String(value).trim().toLowerCase() === "true"
+  }
   // nvidia-smi formats its CSV numbers with the session locale, so a
   // comma-decimal locale (de_DE, fr_FR, it_IT) turns "55.30" into "55,30" —
   // a sixth comma-separated field, after which every reading is one slot off.

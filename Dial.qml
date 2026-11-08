@@ -31,6 +31,8 @@ Item {
   property real diameter: Style.space(108)
   property real arcWidth: Math.max(3, Style.space(4))
   property string fontFamily: Style.font.family
+  // Fade the value colours on change (see Service.animateValues).
+  property bool animated: false
 
   readonly property string displayTitle: title !== "" ? title : label
   readonly property real fraction: ratio >= 0 ? Math.max(0, Math.min(1, ratio)) : (max > 0 ? Math.max(0, Math.min(1, value / max)) : 0)
@@ -125,7 +127,7 @@ Item {
       font.pixelSize: Style.font.title
       font.bold: true
       color: root.valueColor
-      Behavior on color { ColorAnimation { duration: 240 } }
+      Behavior on color { enabled: root.animated; ColorAnimation { duration: 240 } }
     }
 
     Text {
@@ -137,7 +139,7 @@ Item {
       font.pixelSize: Style.font.caption
       font.bold: true
       color: root.subTextColor
-      Behavior on color { ColorAnimation { duration: 240 } }
+      Behavior on color { enabled: root.animated; ColorAnimation { duration: 240 } }
     }
   }
 }

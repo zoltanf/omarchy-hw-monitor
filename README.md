@@ -224,6 +224,7 @@ omarchy bar set zoltanf.hw-monitor fahrenheit true --json
 | `panelSectionsHidden` | array/string | `[]` | Panel sections to hide. |
 | `panelSectionsCollapsed` | array/string | `[]` | Panel sections folded to their header. Clicking a section's header edits this; folded sections skip their sampling. |
 | `pauseWhenIdleSec` | int | `120` | Stop sampling after this many seconds without keyboard or mouse input (screensaver, lock, screen off), unless the panel is open; the first input resumes it. A playing video counts as activity. `0` never pauses. |
+| `animateValues` | bool | `false` | Ease gauges, meters and value colours to each new reading. Off because it costs CPU: each sample then redraws the bar about 20 times instead of once (measured 6.8 % vs 3.0 % shell CPU on the bar, 12.7 % vs 2.6 % with the panel open). Folding and reordering sections still animate. |
 | `panelDials` | array/string | `cpu,ram,gpu` | Order of the round dials at the top of the panel. |
 | `panelDialsHidden` | array/string | `[]` | Dials to hide. |
 | `ramFormat` | string | `"used/total"` | `"used/total"` (`12/23G`), `"used"` (`12.3G`), `"percent"` (`52%`), `"free"` (`11.1G`), or `"available"` (`11.1G`). |

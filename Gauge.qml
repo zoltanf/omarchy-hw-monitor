@@ -14,6 +14,8 @@ Item {
   id: root
 
   property real ratio: 0
+  // Ease the fill to each new reading (see Service.animateValues).
+  property bool animated: false
   property color fillColor: Color.foreground
   property color trackColor: Qt.rgba(fillColor.r, fillColor.g, fillColor.b, 0.14)
   property color borderColor: Qt.rgba(fillColor.r, fillColor.g, fillColor.b, 0.4)
@@ -73,8 +75,8 @@ Item {
         readonly property real span: body.height - root.inset * 2
         height: root.clampedRatio <= 0 ? 0 : Math.max(2, Math.round(span * root.clampedRatio))
 
-        Behavior on height { NumberAnimation { duration: 320; easing.type: Easing.OutCubic } }
-        Behavior on color { ColorAnimation { duration: 240 } }
+        Behavior on height { enabled: root.animated; NumberAnimation { duration: 320; easing.type: Easing.OutCubic } }
+        Behavior on color { enabled: root.animated; ColorAnimation { duration: 240 } }
       }
     }
   }
