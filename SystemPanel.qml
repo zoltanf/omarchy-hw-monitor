@@ -187,13 +187,20 @@ KeyboardPanel {
       ratio: hw.memPercent >= 0 ? hw.memPercent / 100 : 0,
       severity: Model.severity(hw.memPercent, root.warnPercent, root.criticalPercent)
     }
-    if (key === "gpu") return {
-      title: "GPU",
-      valueText: hw.hasGpu ? (hw.gpuPercent >= 0 ? Math.round(hw.gpuPercent) + "%" : (hw.gpuVramPercent >= 0 ? Math.round(hw.gpuVramPercent) + "%" : "–")) : "N/A",
-      subText: hw.hasGpu && hw.gpuTempC > 0 ? Model.formatTemp(hw.gpuTempC, root.fahrenheit) : (hw.hasGpu && hw.gpuWatts >= 0 ? Model.formatWatts(hw.gpuWatts) : ""),
-      subTextColor: root.tempColor(hw.gpuTempC),
-      ratio: hw.hasGpu ? (hw.gpuPercent >= 0 ? hw.gpuPercent / 100 : (hw.gpuVramPercent >= 0 ? hw.gpuVramPercent / 100 : 0)) : 0,
-      severity: hw.hasGpu ? Model.severity(hw.gpuPercent >= 0 ? hw.gpuPercent : hw.gpuVramPercent, root.warnPercent, root.criticalPercent) : 0
+    if (key === "gpu") {
+      // A card with no load counter (Apple GPU without agx_stats) shows its
+      // temperature as the dial value instead of a permanent "–".
+      var gpuHasCounter = hw.hasGpu && !!(hw.gpuInfo.busyPath || hw.gpuInfo.idlePath || hw.gpuInfo.agxStatsPath
+        || hw.gpuInfo.vramTotalPath || hw.gpuIsNvidia)
+      var tempOnly = hw.hasGpu && !gpuHasCounter
+      return {
+        title: "GPU",
+        valueText: hw.hasGpu ? (hw.gpuPercent >= 0 ? Math.round(hw.gpuPercent) + "%" : (hw.gpuVramPercent >= 0 ? Math.round(hw.gpuVramPercent) + "%" : (tempOnly && hw.gpuTempC > 0 ? Model.formatTemp(hw.gpuTempC, root.fahrenheit) : "–"))) : "N/A",
+        subText: !tempOnly && hw.hasGpu && hw.gpuTempC > 0 ? Model.formatTemp(hw.gpuTempC, root.fahrenheit) : (hw.hasGpu && hw.gpuWatts >= 0 ? Model.formatWatts(hw.gpuWatts) : ""),
+        subTextColor: root.tempColor(hw.gpuTempC),
+        ratio: tempOnly ? Math.min(1, Math.max(0, (hw.gpuTempC - 30) / Math.max(1, root.criticalTempC - 30))) : (hw.hasGpu ? (hw.gpuPercent >= 0 ? hw.gpuPercent / 100 : (hw.gpuVramPercent >= 0 ? hw.gpuVramPercent / 100 : 0)) : 0),
+        severity: tempOnly ? Model.severity(hw.gpuTempC, root.warnTempC, root.criticalTempC) : (hw.hasGpu ? Model.severity(hw.gpuPercent >= 0 ? hw.gpuPercent : hw.gpuVramPercent, root.warnPercent, root.criticalPercent) : 0)
+      }
     }
     return {
       title: "CPU",

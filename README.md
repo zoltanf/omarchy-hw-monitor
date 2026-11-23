@@ -209,12 +209,12 @@ omarchy bar set zoltanf.hw-monitor fahrenheit true --json
 |---|---|---|---|
 | `mode` | string | `"icons"` | `"icons"`, `"compact"`, `"full"`, or `"labels"`. Right-clicking cycles them. |
 | `itemsOrder` | array/string | `"gpu,cpu,cpu-temp,ram"` | Sequence of telemetry items in the top bar (`"gpu,cpu,cpu-temp,ram"` or `"gpu,cpu,cpu-temp,gpu-temp,ram"`). |
-| `showGpu` | bool | `true` | Show GPU load (hidden automatically if no card was found). |
+| `showGpu` | bool | `true` | Show GPU load (hidden automatically if no card reports load or VRAM; such a card shows its temperature in the panel, and in the bar through `showGpuTemp`). |
 | `showCpu` | bool | `true` | Show CPU load. |
 | `showCpuTemp` | bool | `true` | Show CPU temperature with thermometer icon. |
 | `showGpuTemp` | bool | `false` | Show GPU temperature in the bar. |
 | `showRam` | bool | `true` | Show memory / RAM usage. |
-| `showTopProcs` | bool | `true` | Show the top-processes section in the system panel (sampled only while open). |
+| `showTopProcs` | bool | `true` | Show the top-processes section in the system panel. Set it to `false` to disable process sampling entirely — not just hide the rows: no `/proc` scan, browser hint scan, or cache write happens while the section is hidden, even with the panel open. |
 | `topProcCount` | int | `6` | How many rows to list (3–12, sorted by the active metric). |
 | `topProcSort` | enum | `ram` | Sort top processes by `ram` or `cpu` (switchable in the panel header). |
 | `topProcGroup` | bool | `true` | Collapse processes by application (systemd scope, name fallback) with counts and summed figures. |
@@ -264,7 +264,12 @@ Bar sampling reads `/proc` and `/sys` inside the shell process via `FileView` �
 no polling script on a timer for that. Three documented helpers do fork:
 `nvidia-smi` on the sample interval (NVIDIA cards only — they expose no sysfs
 telemetry), `proc_top.py` up to every 3 s and `disk-probe` up to every 5 s,
-the last two only while the system panel is open.
+the last two only while the system panel is open. `proc_top.py` also needs the
+Top processes section shown (`showTopProcs`, and not hidden from the gear
+drawer); hiding it cancels an in-flight sample, so it cannot write the browser
+cache after the fact. During discovery, `hw-probe` bounds its own `nvidia-smi`
+child with a 5 s kill-after-1 s `timeout` (under the widget's 8 s watchdog), so
+a hung discovery subprocess cannot outlive the probe.
 
 | | Source | Shown |
 |---|---|---|
@@ -272,12 +277,12 @@ the last two only while the system panel is open.
 | RAM compression | `/sys/block/zramN/mm_stat`, `/proc/meminfo` (`Zswap`, `Zswapped`) | zram devices used as swap are found by `hw-probe`; ratio is data stored against RAM used, allocator overhead included |
 | CPU load | `/proc/stat` | jiffie deltas between samples, `iowait` counted as idle — the same arithmetic `top` and `btop` use |
 | CPU clock | `/proc/cpuinfo` | mean across every thread |
-| CPU temperature | `hwmon` | die/package sensor, picked by scoring (`k10temp` `Tdie`/`Tctl`, `coretemp` `Package id 0`, `zenpower`, ThinkPad, ARM SoC, then `acpitz`) |
+| CPU temperature | `hwmon`, thermal zones on Apple Silicon | die/package sensor, picked by scoring (`k10temp` `Tdie`/`Tctl`, `coretemp` `Package id 0`, `zenpower`, Apple `SMC TCMb`/`cpu-die-thermal`/`macsmc_soc_die`, ARM SoC, ThinkPad, Apple `cpu-p*-thermal`, then `acpitz`) |
 | GPU | the card's own `sysfs` | load, edge temperature, VRAM, board power, fan, core clock |
-| Apple silicon GPU | `<card>/device/agx_stats` (asahi driver, Omarchy's `linux-aurora` kernel) | load (firmware `util1`, else `busy_ns` deltas), temperature, power. Only used when the file holds the firmware figures; a field missing from one read keeps its last value |
+| Apple silicon GPU | `<card>/device/agx_stats` (asahi driver, Omarchy's `linux-aurora` kernel) | load (firmware `util1`, else `busy_ns` deltas), temperature, power. Only used when the file holds the firmware figures; a field missing from one read keeps its last value. Without `agx_stats` (other kernels): temperature only, from a `gpu*-thermal` zone; while the GPU is powered down that sensor reads about 0, so the last real reading is held for 10 s, then shown as unknown |
 | Load average | `/proc/loadavg` | 1/5/15 minute |
 | Storage | `findmnt` + `lsblk`, via [`disk-probe`](disk-probe) | size, used and available per mounted filesystem (percent as `df` computes it), disk model, removable or network |
-| Browser tab hints | `/proc/<pid>/mem` of Chromium-family processes | read-only, and only for the processes the kernel lets the shell attach to. With the Group toggle off, the most frequent host in the renderer's memory becomes the `[domain]` tag, and rows read `[tab]` when the attach is refused or nothing was found |
+| Browser tab hints | `/proc/<pid>/mem` of Chromium-family processes | read-only, and only for the processes the kernel lets the shell attach to. Never touched while the Top processes section is hidden. With the Group toggle off, the most frequent host in the renderer's memory becomes the `[domain]` tag, and rows read `[tab]` when the attach is refused or nothing was found |
 
 An NVIDIA card is the exception: it reports none of this through sysfs, so it
 is polled through `nvidia-smi` on the same interval.
@@ -311,7 +316,8 @@ load do not make the bar flip every sample.
 
 Sensor paths are found once, at load, by [`hw-probe`](hw-probe) — a small shell
 script, because working out *which* files a machine exposes means globbing
-`hwmon` and matching labels, and every vendor names its sensors differently.
+`hwmon` and `/sys/class/thermal/thermal_zone*` and matching their labels and
+types, and every vendor names its sensors differently.
 After that the resolved sysfs/`/proc` paths need no fork on a timer the way a
 Waybar custom module does: the widget reads them directly with `FileView`, which
 is what makes a two-second interval reasonable for something that runs for the

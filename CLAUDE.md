@@ -44,6 +44,21 @@ Git remotes: `origin` = the fork, `upstream` = meviusisback.
   `sampleIntervalSec` (battery interval) instead of upstream's `intervalSec`.
   Version `1.6.0+storage.1`. Not exercised on real hardware: NVIDIA, Intel,
   Asahi (the author's laptop is AMD).
+- 2026-11-23: merged upstream 1.7.1 (`a43955d`): Apple Silicon CPU/GPU
+  temperatures from thermal zones (`hw-probe`, `Model.steadyGpuTemp` holds the
+  last real GPU reading 10 s while the powered-down sensor reads ~0),
+  temperature-only GPU cards (`gpuHasCounter`: bar shows a GPU° cell instead of
+  load, panel dial shows the temperature), `proc_top.py` gated in `Service` on
+  the Top processes section, `nvidia-smi` discovery bounded by `timeout`.
+  Fork kept on purpose: the fork's chip name for Apple GPUs ("Apple M2 GPU",
+  upstream's line always printed "Apple GPU"); `procPanelOpen = true` on open
+  (upstream sets it to `showTopProcs`, which here would also stop
+  `disk-probe`); the panel's section structure (upstream's dial change ported
+  into `dialSpec("gpu")`). Adapted: `gpuHasCounter` counts `agxStatsPath`, the
+  thermal-zone GPU temperature is skipped when `agx_stats` is there (it has its
+  own), and `Service.showTopProcs` also honours `panelSectionsHidden`
+  containing `procs`. Version `1.7.1+storage.1`. Tests pass; checked live on the
+  author's AMD laptop only (Apple paths not exercised).
 - 2026-10-12: Memory section renamed "Memory & Swap", RAM Compression block
   (zram from `mm_stat`, devices found by `hw-probe` via `/proc/swaps`;
   zswap from `/proc/meminfo`). zswap path untested (off on the author's
@@ -61,7 +76,7 @@ Git remotes: `origin` = the fork, `upstream` = meviusisback.
 - Added: Storage section (panel only); layout controls in the gear drawer
   (order + show/hide for bar items, panel dials, panel sections); `/boot`,
   `/boot/efi`, `/efi` hidden from Storage by default (`diskHideMounts`).
-- Also installed on `gmbp` (Garage MacBook, 2026-11-14): a **plain copy** (not a symlink, at the user's request) of `~/Work/omarchy-hw-monitor` in `~/.config/omarchy/plugins/zoltanf.hw-monitor`, refreshed only by copying again (`rsync -a --exclude __pycache__`); first item of the bar's right section. Insync does not keep the executable bit: `hw-probe`, `disk-probe` and `proc_top.py` arrived 0644 and the shell logged "Process failed to start … hw-probe" until `chmod +x`. After each re-copy, run `chmod +x` on them in the plugin folder.
+- Also installed on `gmbp` (Garage MacBook, 2026-11-14): a **plain copy** (not a symlink, at the user's request) of what was then `~/Work/omarchy-hw-monitor` (moved to `~/Development/omarchy-plugins/` on 2026-11-23, outside Insync, so a re-copy no longer arrives through Drive) in `~/.config/omarchy/plugins/zoltanf.hw-monitor`, refreshed only by copying again (`rsync -a --exclude __pycache__`); first item of the bar's right section. Insync does not keep the executable bit: `hw-probe`, `disk-probe` and `proc_top.py` arrived 0644 and the shell logged "Process failed to start … hw-probe" until `chmod +x`. After each re-copy, run `chmod +x` on them in the plugin folder.
 - On the author's laptop it is installed as a **symlink**
   `~/.config/omarchy/plugins/zoltanf.hw-monitor` → this checkout, in the bar
   slot `meviusisback.hw-monitor` used to have (that one is disabled).

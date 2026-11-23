@@ -3,7 +3,7 @@
   "schemaVersion": 1,
   "id": "zoltanf.hw-monitor",
   "name": "Hardware Monitor + Storage",
-  "version": "1.6.0+storage.1",
+  "version": "1.7.1+storage.1",
   "author": "zoltanf (fork of meviusisback/omarchy-hw-monitor; original by Edgar Silva)",
   "license": "MIT",
   "description": "GPU, CPU, temperature, and RAM in the bar as sleek icon + figure readouts, with a first-class visual system panel including top processes by RAM (with grouping off, per-tab hints for Chromium-family browsers) and free space on every mounted disk and share.",
@@ -108,7 +108,7 @@
         "type": "boolean",
         "label": "Show GPU load",
         "defaultValue": true,
-        "description": "Show GPU load in the top bar (hidden automatically if no GPU card is found)."
+        "description": "Show GPU load in the top bar (hidden automatically if no GPU card reports load or VRAM)."
       },
       {
         "key": "showCpu",

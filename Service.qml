@@ -66,6 +66,7 @@ Item {
       // card's until the next sample repopulates them.
       gpuPercent = -1
       gpuTempC = -1
+      gpuTempRealMs = 0
       gpuWatts = -1
       gpuRpm = -1
       gpuMhz = -1
@@ -101,6 +102,7 @@ Item {
 
   property real gpuPercent: -1
   property real gpuTempC: -1
+  property real gpuTempRealMs: 0
   property real gpuWatts: -1
   property real gpuRpm: -1
   property real gpuMhz: -1
@@ -131,6 +133,13 @@ Item {
     if (typeof value === "boolean") return value
     return String(value).trim().toLowerCase() !== "false"
   }
+  // Hiding the process section must stop the sampler, not just its rows: with
+  // Group off, proc_top.py scans readable Chromium renderers for [domain] hints
+  // and writes the browser cache. Enforce this here, where the worker starts,
+  // reading the same settings the panel reads: the older showTopProcs switch
+  // and the Processes section hidden from the gear menu (panelSectionsHidden).
+  readonly property bool showTopProcs: boolSetting("showTopProcs", true)
+    && Model.keyList(setting("panelSectionsHidden", [])).indexOf("procs") === -1
   readonly property string procTopPath: pluginDir + "/proc_top.py"
   // Value animations: gauges and meters easing to each new reading, and the
   // colour fades that follow it. Off by default: every sample then played
@@ -212,6 +221,15 @@ Item {
     var n = parseInt(String(setting(name, fallback)), 10)
     if (!isFinite(n)) n = fallback
     return Math.max(min, Math.min(max, n))
+  }
+
+  function boolSetting(name, fallback) {
+    var value = setting(name, fallback)
+    if (typeof value === "boolean") return value
+    var text = String(value).trim().toLowerCase()
+    if (["true", "1", "yes", "on"].indexOf(text) !== -1) return true
+    if (["false", "0", "no", "off"].indexOf(text) !== -1) return false
+    return fallback
   }
 
   // hwmon reports temperatures in millidegrees, but a handful of drivers
@@ -300,7 +318,10 @@ Item {
     }
     if (gpuTempFile.path !== "" && !_gpuSuspended) {
       gpuTempFile.reload()
-      gpuTempC = readTemp(gpuTempFile)
+      var gpuReading = readTemp(gpuTempFile)
+      var gpuReadMs = Date.now()
+      gpuTempC = Model.steadyGpuTemp(String(gpuInfo.kind), gpuReading, gpuTempC, gpuTempRealMs, gpuReadMs)
+      if (gpuReading >= 10) gpuTempRealMs = gpuReadMs
     }
     if (gpuPowerFile.path !== "" && !_gpuSuspended) {
       gpuPowerFile.reload()
@@ -453,7 +474,7 @@ Item {
   // (intero clampato, sort ram/cpu validato, flag --group per presenza):
   // la stringa grezza del setting non tocca mai argv. Niente PATH, niente shell.
   function refreshProcTop() {
-    if (_destroyed || !active || !(procPanelOpen || _prefetching) || procTopProcess.running) return
+    if (_destroyed || !active || !(procPanelOpen || _prefetching) || !showTopProcs || procTopProcess.running) return
     var now = Date.now()
     if (_lastProcTopTry > 0 && now - _lastProcTopTry < 3000) return
     _lastProcTopTry = now
@@ -504,6 +525,17 @@ Item {
     if (_destroyed) return
     _lastProcTopTry = 0
     refreshProcTop()
+  }
+
+  // The section can be switched off while the panel is still open. Cancel a
+  // worker already in flight as well, so that last sample cannot scan
+  // renderers and refresh the browser cache after the user opted out.
+  onShowTopProcsChanged: {
+    if (_destroyed || showTopProcs || !procTopProcess || !procTopProcess.running) return
+    procTopProcess.running = false
+    procTopWatchdog.stop()
+    procTopKillTimer.restart()
+    procTopByteGuard.stop()
   }
 
   // ----------------------------------------------------------------- files
@@ -773,6 +805,9 @@ Item {
     }
   }
 
+  // hw-probe bounds its own nvidia-smi child with `timeout -k 1 5` (6 s worst
+  // case, under this 8 s watchdog), so a hung discovery subprocess cannot
+  // outlive the probe. These timers still stop a helper wedged elsewhere.
   Timer {
     id: probeWatchdog
     interval: 8000
