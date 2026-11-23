@@ -61,6 +61,7 @@ Git remotes: `origin` = the fork, `upstream` = meviusisback.
 - Added: Storage section (panel only); layout controls in the gear drawer
   (order + show/hide for bar items, panel dials, panel sections); `/boot`,
   `/boot/efi`, `/efi` hidden from Storage by default (`diskHideMounts`).
+- Also installed on `gmbp` (Garage MacBook, 2026-11-14): a **plain copy** (not a symlink, at the user's request) of `~/Work/omarchy-hw-monitor` in `~/.config/omarchy/plugins/zoltanf.hw-monitor`, refreshed only by copying again (`rsync -a --exclude __pycache__`); first item of the bar's right section. Insync does not keep the executable bit: `hw-probe`, `disk-probe` and `proc_top.py` arrived 0644 and the shell logged "Process failed to start … hw-probe" until `chmod +x`. After each re-copy, run `chmod +x` on them in the plugin folder.
 - On the author's laptop it is installed as a **symlink**
   `~/.config/omarchy/plugins/zoltanf.hw-monitor` → this checkout, in the bar
   slot `meviusisback.hw-monitor` used to have (that one is disabled).
